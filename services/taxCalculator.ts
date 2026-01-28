@@ -1,5 +1,5 @@
 
-import { EmployeeData, CalculationResult, OptimizationSummary } from '../types';
+import { EmployeeData, CalculationResult, OptimizationSummary, SearchPoint } from '../types';
 import { ANNUAL_TAX_BRACKETS, BONUS_TAX_BRACKETS, STANDARD_DEDUCTION } from '../constants';
 
 /**
@@ -37,7 +37,6 @@ export const calculateBonusTax = (bonus: number): number => {
 export const optimizeBonus = (data: EmployeeData): OptimizationSummary => {
   const { monthlySalary, annualBonus, socialInsurance, additionalDeductions, otherDeductions } = data;
   
-  // 年度综合所得应纳税所得额（不含年终奖）
   const annualBaseTaxable = Math.max(0, (monthlySalary * 12) - STANDARD_DEDUCTION - (socialInsurance * 12) - (additionalDeductions * 12) - (otherDeductions * 12));
   
   const calculateTotal = (bonusPart: number, salaryPart: number, name: string): CalculationResult => {
@@ -58,28 +57,39 @@ export const optimizeBonus = (data: EmployeeData): OptimizationSummary => {
     };
   };
 
-  // 策略1：全部作为年终奖单独计税
   const allBonus = calculateTotal(annualBonus, 0, "方案A：全部年终奖计税");
-
-  // 策略2：全部并入综合所得计税
   const allSalary = calculateTotal(0, annualBonus, "方案B：全部并入工资薪金");
 
-  // 策略3：寻找最优拆分 (迭代搜索)
-  // 虽然理论上有最优临界点，但迭代计算最直观
   let bestStrategy = allBonus;
-  // 步长设为500，平衡性能与精度
-  for (let bonusPart = 0; bonusPart <= annualBonus; bonusPart += 500) {
+  const searchPath: SearchPoint[] = [];
+  
+  // 更加精细的搜索：至少20个采样点，或者每1000元一个点
+  const step = Math.max(100, Math.floor(annualBonus / 50));
+  
+  for (let bonusPart = 0; bonusPart <= annualBonus; bonusPart += step) {
     const salaryPart = annualBonus - bonusPart;
     const current = calculateTotal(bonusPart, salaryPart, "方案C：最优拆分组合");
+    
+    searchPath.push({
+      bonusPart,
+      totalTax: current.totalTax
+    });
+
     if (current.totalTax < bestStrategy.totalTax) {
-      bestStrategy = current;
+      bestStrategy = { ...current, strategyName: "方案C：最优拆分组合" };
     }
+  }
+  
+  // 确保最后一个点（全部年终奖）也被加入路径
+  if (searchPath[searchPath.length - 1].bonusPart !== annualBonus) {
+    searchPath.push({ bonusPart: annualBonus, totalTax: allBonus.totalTax });
   }
 
   return {
     bestStrategy,
     allBonusStrategy: allBonus,
     allSalaryStrategy: allSalary,
-    savings: Math.max(allBonus.totalTax, allSalary.totalTax) - bestStrategy.totalTax
+    savings: Math.max(allBonus.totalTax, allSalary.totalTax) - bestStrategy.totalTax,
+    searchPath
   };
 };

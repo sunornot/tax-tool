@@ -23,9 +23,15 @@ export interface CalculationResult {
   salaryTax: number;
 }
 
+export interface SearchPoint {
+  bonusPart: number;
+  totalTax: number;
+}
+
 export interface OptimizationSummary {
   bestStrategy: CalculationResult;
   allBonusStrategy: CalculationResult;
   allSalaryStrategy: CalculationResult;
   savings: number;
+  searchPath: SearchPoint[]; // 寻找路径数据
 }
